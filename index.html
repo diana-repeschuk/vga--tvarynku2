@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Вгадай тваринку</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh; padding: 18px;
+  display: flex; justify-content: center; align-items: center;
+  font-family: Arial, sans-serif;
+  background: linear-gradient(135deg, #ffe6a7, #ffc9df, #c5edff);
+}
+.game {
+  width: 100%; max-width: 450px; background: white;
+  border-radius: 28px; padding: 22px 16px; text-align: center;
+  box-shadow: 0 8px 25px #0002;
+}
+h1 { color: #ff823e; font-size: 29px; }
+.subtitle { color: #777; margin-bottom: 15px; }
+.score {
+  display: inline-block; background: #fff0b5; color: #a66b00;
+  padding: 12px 20px; border-radius: 20px; font-size: 18px;
+  font-weight: bold; margin-bottom: 18px;
+}
+.question-box { background: #e5f5ff; padding: 20px 12px; border-radius: 22px; margin-bottom: 18px; }
+.question-icon { font-size: 42px; }
+.question { color: #315b80; font-size: 22px; font-weight: bold; line-height: 1.4; margin-top: 8px; }
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.animal-card {
+  border: 3px solid transparent; border-radius: 22px; padding: 15px 5px;
+  min-height: 125px; cursor: pointer; font-family: inherit;
+  background: #fff0d6; transition: transform .2s;
+}
+.animal-card:nth-child(2) { background: #e1f8e6; }
+.animal-card:nth-child(3) { background: #eee5ff; }
+.animal-card:nth-child(4) { background: #ffe5ed; }
+.animal-card:active { transform: scale(.94); }
+.animal-card:disabled { cursor: default; }
+.animal-emoji { display: block; font-size: 52px; margin-bottom: 7px; }
+.animal-name { font-size: 17px; font-weight: bold; color: #444; }
+.correct { border-color: #35c878; background: #d8ffe7 !important; animation: bounce .6s; }
+.wrong { border-color: #ff7777; animation: shake .3s; }
+.feedback { min-height: 55px; margin-top: 15px; font-size: 19px; font-weight: bold; color: #25a85d; line-height: 1.4; }
+.next-button, .restart-button {
+  display: none; border: none; border-radius: 20px; padding: 14px 23px;
+  background: #ff963e; color: white; font-size: 18px; font-weight: bold; cursor: pointer;
+}
+.progress { margin-top: 16px; color: #888; }
+@keyframes bounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.13); } }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+@media(max-width: 360px) {
+  h1 { font-size: 25px; } .question { font-size: 19px; }
+  .animal-emoji { font-size: 44px; }
+}
+</style>
+</head>
+<body>
+<div class="game">
+  <h1>🐾 Вгадай тваринку! 🐾</h1>
+  <div class="subtitle">Весела гра для маленьких розумників!</div>
+  <div class="score">⭐ Правильних відповідей: <span id="score">0</span></div>
+  <div class="question-box">
+    <div class="question-icon">❓</div>
+    <div class="question" id="question"></div>
+  </div>
+  <div class="cards" id="cards">
+    <button class="animal-card" data-animal="monkey"><span class="animal-emoji">🐒</span><span class="animal-name">Мавпочка</span></button>
+    <button class="animal-card" data-animal="dog"><span class="animal-emoji">🐶</span><span class="animal-name">Собачка</span></button>
+    <button class="animal-card" data-animal="rabbit"><span class="animal-emoji">🐰</span><span class="animal-name">Зайчик</span></button>
+    <button class="animal-card" data-animal="cat"><span class="animal-emoji">🐱</span><span class="animal-name">Котик</span></button>
+  </div>
+  <div class="feedback" id="feedback"></div>
+  <button class="next-button" id="next">Наступне запитання ➡️</button>
+  <button class="restart-button" id="restart">🔄 Грати ще раз</button>
+  <div class="progress" id="progress"></div>
+</div>
+<script>
+const questions = [
+  { text: "Хто любить їсти банан? 🍌", answer: "monkey" },
+  { text: "Хто живе у будці? 🏠", answer: "dog" },
+  { text: "Хто любить їсти морквинку? 🥕", answer: "rabbit" },
+  { text: "Хто говорить «няв-няв»? 🐾", answer: "cat" },
+  { text: "Хто охороняє будинок і гавкає? 🏡", answer: "dog" },
+  { text: "Хто має довгі вушка? 👂", answer: "rabbit" },
+  { text: "Хто живе на деревах і лазить по гілках? 🌳", answer: "monkey" },
+  { text: "Хто любить молочко та муркоче? 🥛", answer: "cat" },
+  { text: "Хто стрибає та має пухнастий хвостик? 🐾", answer: "rabbit" },
+  { text: "Хто радісно зустрічає господаря? ❤️", answer: "dog" }
+];
+let current = 0, score = 0, answered = false;
+const question = document.getElementById("question");
+const scoreElement = document.getElementById("score");
+const feedback = document.getElementById("feedback");
+const next = document.getElementById("next");
+const restart = document.getElementById("restart");
+const progress = document.getElementById("progress");
+const cards = document.querySelectorAll(".animal-card");
+
+function speak(message) {
+  if (!("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  const voice = new SpeechSynthesisUtterance(message);
+  voice.lang = "uk-UA"; voice.rate = 0.9; voice.pitch = 1.2;
+  window.speechSynthesis.speak(voice);
+}
+function showQuestion() {
+  answered = false;
+  question.textContent = questions[current].text;
+  feedback.textContent = "";
+  feedback.style.color = "#25a85d";
+  next.style.display = "none";
+  restart.style.display = "none";
+  progress.textContent = "Запитання " + (current + 1) + " із " + questions.length;
+  cards.forEach(card => {
+    card.disabled = false;
+    card.classList.remove("correct", "wrong");
+  });
+}
+cards.forEach(card => {
+  card.addEventListener("click", () => {
+    if (answered) return;
+    const selected = card.dataset.animal;
+    const correct = questions[current].answer;
+    if (selected === correct) {
+      answered = true;
+      score++;
+      scoreElement.textContent = score;
+      card.classList.add("correct");
+      cards.forEach(c => c.disabled = true);
+      feedback.textContent = "🎉 Молодець! Правильна відповідь! ❤️";
+      speak("Молодець! Чудово! Ти справжній розумник!");
+      next.style.display = "inline-block";
+    } else {
+      card.classList.add("wrong");
+      feedback.style.color = "#ff7777";
+      feedback.textContent = "Спробуй ще раз! У тебе все вийде! 💛";
+      speak("Спробуй ще раз! Ти зможеш!");
+      setTimeout(() => {
+        card.classList.remove("wrong");
+        feedback.style.color = "#25a85d";
+        feedback.textContent = "";
+      }, 900);
+    }
+  });
+});
+next.addEventListener("click", () => {
+  current++;
+  if (current < questions.length) showQuestion();
+  else finishGame();
+});
+function finishGame() {
+  question.textContent = "Ти пройшов усі запитання! 🏆";
+  document.querySelector(".question-icon").textContent = "🎉";
+  document.getElementById("cards").style.display = "none";
+  feedback.innerHTML = "Ура! Ти відповів правильно на " + score + " із " + questions.length + " запитань!<br>⭐⭐⭐⭐⭐";
+  next.style.display = "none";
+  restart.style.display = "inline-block";
+  progress.textContent = "Гру завершено! ❤️";
+  speak("Вітаю! Ти чудово впорався із завданнями! Ти молодець!");
+}
+restart.addEventListener("click", () => {
+  current = 0; score = 0;
+  scoreElement.textContent = "0";
+  document.getElementById("cards").style.display = "grid";
+  document.querySelector(".question-icon").textContent = "❓";
+  showQuestion();
+});
+showQuestion();
+</script>
+</body>
+</html>
